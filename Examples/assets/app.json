@@ -1,0 +1,115 @@
+{
+  "graph": {
+    "id": "1e7b26c1-182c-4ca9-a658-9dab4470f526",
+    "nodes": [
+      {
+        "type": "InputNode",
+        "id": "b9757298-86cd-425f-8f51-8e551348a6b6",
+        "title": "Input",
+        "inputs": {},
+        "outputs": {
+          "string": {
+            "id": "e00e417b-40ad-4ae9-bd38-669ecda15b6d",
+            "value": "xiaomi14 pro"
+          },
+          "number": {
+            "id": "a4ac660c-8095-4d02-b668-0d3f312ee4a4",
+            "value": 0
+          },
+          "boolean": {
+            "id": "c5df4c20-4845-4812-a7c6-6f9be85b736d",
+            "value": false
+          }
+        },
+        "position": {
+          "x": 299,
+          "y": 256
+        },
+        "width": 200,
+        "twoColumn": false
+      },
+      {
+        "type": "ReplaceTextNode",
+        "id": "2c1663af-eafc-4202-9a40-e4f07bf82599",
+        "title": "ReplaceText",
+        "inputs": {
+          "pattern": {
+            "id": "39fd1b33-44ae-4096-9c99-ec5e1b9996f8",
+            "value": "\\d+"
+          },
+          "replacement": {
+            "id": "662340de-dd0d-4154-991b-de5202f8a189",
+            "value": "xx"
+          },
+          "text": {
+            "id": "febab93e-a804-4dad-a4eb-2a906dcfc006",
+            "value": ""
+          }
+        },
+        "outputs": {
+          "text": {
+            "id": "5f5380cf-04d3-4fbc-94f5-528aabe334e3",
+            "value": ""
+          }
+        },
+        "position": {
+          "x": 564,
+          "y": 296
+        },
+        "width": 200,
+        "twoColumn": false
+      },
+      {
+        "type": "MatchTextNode",
+        "id": "e448ef75-9286-4088-94fa-2679d0f449fe",
+        "title": "MatchText",
+        "inputs": {
+          "pattern": {
+            "id": "517c4172-a9f8-402a-98b1-faec9248b259",
+            "value": "^\\w+"
+          },
+          "text": {
+            "id": "ed380653-8881-49c1-8815-30673e386b24",
+            "value": ""
+          }
+        },
+        "outputs": {
+          "true": {
+            "id": "474d328b-3f6c-4f2c-a0ea-048e1e4e8425",
+            "value": ""
+          },
+          "false": {
+            "id": "47752079-75ed-44db-8f9f-3fdac80147b5",
+            "value": ""
+          }
+        },
+        "position": {
+          "x": 801,
+          "y": 330
+        },
+        "width": 200,
+        "twoColumn": false
+      }
+    ],
+    "connections": [
+      {
+        "id": "6c88f195-4f16-4cf3-b54d-f03f1af1673b",
+        "from": "e00e417b-40ad-4ae9-bd38-669ecda15b6d",
+        "to": "febab93e-a804-4dad-a4eb-2a906dcfc006"
+      },
+      {
+        "id": "b78873cd-cc3b-425f-bd4a-ee5a0fbff230",
+        "from": "5f5380cf-04d3-4fbc-94f5-528aabe334e3",
+        "to": "ed380653-8881-49c1-8815-30673e386b24"
+      }
+    ],
+    "inputs": [],
+    "outputs": [],
+    "panning": {
+      "x": 127.16587540457704,
+      "y": 237.6108018432149
+    },
+    "scaling": 0.6887223472994648
+  },
+  "graphTemplates": []
+}
