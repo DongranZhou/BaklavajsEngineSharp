@@ -29,7 +29,7 @@ namespace Baklavajs
             }
         }
         public EngineStatus internalStatus { get; private set; } = EngineStatus.Stopped;
-        public bool isRunning { get; private set; } = false;
+        public bool isRunning { get; set; } = false;
         /** Start the engine. After started, it will run everytime the graph is changed. */
         public void Start()
         {
