@@ -1,8 +1,8 @@
 ﻿namespace Baklavajs
 {
-  public class EngineContext<T>
+  public class EngineContext
   {
-    public T globalValues;
-    public BaseEngine<T> engine;
+    public CalculationData globalValues;
+    public BaseEngine engine;
   }
 }
