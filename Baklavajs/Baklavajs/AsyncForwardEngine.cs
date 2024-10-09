@@ -1,187 +1,101 @@
 ﻿namespace Baklavajs;
 
-public class AsyncForwardEngine<T> : BaseEngine<T>
+public class AsyncForwardEngine : BaseEngine
 {
   public AsyncForwardEngine(EditorState editor) : base(editor) { }
-  public async Task<Dictionary<string, Dictionary<string, object>>> RunOnce(T calculationData, NodeState startingNode)
-  {
-    try
-    {
-      isRunning = true;
-      return await Execute(calculationData, startingNode);
-    }
-    catch (Exception ex)
-    {
 
-    }
-    finally
-    {
-      isRunning = false;
-    }
-    return new Dictionary<string, Dictionary<string, object>>();
+  public override async Task<CalculationResult> RunGraph(GraphState graph, Dictionary<string, object> inputs, CalculationData calculationData)
+  {
+    List<NodeState> startNodes = GetStartNodes(graph);
+    Dictionary<string, List<NodeState>> forwardMap = MapForwardNode(graph);
+    CalculationResult result = new CalculationResult();
+    IEnumerable<Task<CalculationResult>> tasks = startNodes.Select(n => CalculateNode(n, graph, inputs, calculationData, forwardMap, result));
+    await Task.WhenAll(tasks);
+    return result;
   }
-
-  public Task<Dictionary<string, Dictionary<string, object>>> Execute(T calculationData, NodeState startingNode)
+  async Task<CalculationResult> CalculateNode(NodeState n
+  , GraphState graph
+  , Dictionary<string, object> inputs
+  , CalculationData calculationData
+  , Dictionary<string, List<NodeState>> forwardMap
+  , CalculationResult result)
   {
-    TaskCompletionSource<Dictionary<string, Dictionary<string, object>>> tcs = new TaskCompletionSource<Dictionary<string, Dictionary<string, object>>>();
-    Dictionary<string, Dictionary<string, object>> result = new Dictionary<string, Dictionary<string, object>>();
-    if (startingNode == null)
+    Dictionary<string, object> inputsForNode = new Dictionary<string, object>();
+    foreach (var kv in n.inputs)
     {
-      tcs.SetResult(result);
-      return tcs.Task;
+      inputsForNode[kv.Key] = getInterfaceValue(inputs, kv.Value.id);
+    }
+    events.beforeNodeCalculation?.Invoke(new BeforeNodeCalculationEventData(n, inputsForNode));
+    var r = new Dictionary<string, object>();
+    if (calculators.TryGetValue(n.type, out ICalculator calculator))
+    {
+      r = await calculator.Calculate(inputsForNode, n, new EngineContext { globalValues = calculationData, engine = this });
+    }
+    else if (defaultCalculator != null)
+    {
+      r = await defaultCalculator.Calculate(inputsForNode, n, new EngineContext { globalValues = calculationData, engine = this });
+    }
+    else
+    {
+      foreach (KeyValuePair<string, NodeInterfaceState> kv in n.outputs)
+      {
+        string k = kv.Key;
+        NodeInterfaceState intf = kv.Value;
+        r[k] = getInterfaceValue(inputs, intf.id);
+      }
+    }
+    ValidateNodeCalculationOutput(n, r);
+    events.afterNodeCalculation?.Invoke(new AfterNodeCalculationEventData(n, r));
+
+    result[n.id] = new Dictionary<string, object>();
+    foreach (KeyValuePair<string, object> kv in r)
+    {
+      result[n.id][kv.Key] = kv.Value;
     }
 
-    GraphState graph = editor.graph;
-    Dictionary<string, object> inputs = GetInputValues(graph);
-    Dictionary<string, NodeRuntimeStatus> nodesToCalculate = new Dictionary<string, NodeRuntimeStatus>();
-    Dictionary<string, NodeState> interfaceToNode = new Dictionary<string, NodeState>();
-
-    foreach (NodeState node in graph.nodes)
+    foreach (var kv in n.outputs)
     {
-      foreach (NodeInterfaceState intf in node.outputs.Values)
+      string intfKey = kv.Key;
+      NodeInterfaceState intf = kv.Value;
+      foreach (var c in graph.connections.Where(c => c.from == intf.id))
       {
-        interfaceToNode.Add(intf.id, node);
-      }
-      foreach (NodeInterfaceState intf in node.inputs.Values)
-      {
-        interfaceToNode.Add(intf.id, node);
-      }
-    }
-
-    List<NodeState> GetBackNodes(NodeState node)
-    {
-      List<NodeState> backNodes = new List<NodeState>();
-      foreach (NodeInterfaceState input in node.inputs.Values)
-      {
-        foreach (ConnectionState c in graph.connections)
+        if (c != null)
         {
-          if (c.to == input.id)
+          object v = hooks.transferData == null ? r[intfKey] : hooks.transferData.Invoke(r[intfKey], c);
+          if (AllowMultipleConnections(c.to, graph.connections))
           {
-            backNodes.Add(interfaceToNode[c.from]);
-          }
-        }
-      }
-      return backNodes;
-    }
-
-    List<NodeState> GetForwardNodes(NodeState node)
-    {
-      List<NodeState> forwardNodes = new List<NodeState>();
-      foreach (NodeInterfaceState output in node.outputs.Values)
-      {
-        foreach (ConnectionState c in graph.connections)
-        {
-          if (c.from == output.id)
-          {
-            forwardNodes.Add(interfaceToNode[c.to]);
-          }
-        }
-      }
-      return forwardNodes;
-    }
-    List<NodeState> GetConnectionNodes(NodeState node)
-    {
-      List<NodeState> backNodes = GetBackNodes(node);
-      List<NodeState> forwardNodes = GetForwardNodes(node);
-      return backNodes.Concat(forwardNodes).ToList();
-    }
-    void GetLeafNodes(NodeState node)
-    {
-      if (!nodesToCalculate.ContainsKey(node.id))
-      {
-        nodesToCalculate[node.id] = NodeRuntimeStatus.none;
-        foreach (NodeState n in GetConnectionNodes(node))
-        {
-          GetLeafNodes(n);
-        }
-      }
-    }
-    async void RunDeepLeaf(NodeState n)
-    {
-      if (nodesToCalculate.ContainsKey(n.id) && nodesToCalculate[n.id] == NodeRuntimeStatus.none)
-      {
-        List<NodeState> backNodes = GetBackNodes(n);
-        List<NodeState> backCalc = backNodes.Where(n => nodesToCalculate.ContainsKey(n.id) && nodesToCalculate[n.id] == NodeRuntimeStatus.none).ToList();
-        if (backCalc.Count > 0)
-        {
-          foreach (NodeState _n in backCalc)
-          {
-            RunDeepLeaf(_n);
-          }
-        }
-        else
-        {
-          try
-          {
-            nodesToCalculate[n.id] = NodeRuntimeStatus.started;
-            Dictionary<string, object> inputsForNode = new Dictionary<string, object>();
-            foreach (KeyValuePair<string, NodeInterfaceState> kv in n.inputs)
+            if (inputs.ContainsKey(c.to) && inputs[c.to] is List<object> list)
             {
-              if (inputs.TryGetValue(kv.Value.id, out object v))
-              {
-                inputsForNode[kv.Key] = v;
-              }
-            }
-            Dictionary<string, object> r = new Dictionary<string, object>();
-            if (calculators.TryGetValue(n.type, out ICalculator calculator))
-            {
-              r = await calculator.Calculate(inputsForNode, n, new EngineContext<T> { globalValues = calculationData, engine = this });
+              list.Add(v);
             }
             else
             {
-              foreach (KeyValuePair<string, NodeInterfaceState> kv in n.outputs)
-              {
-                if (inputs.TryGetValue(kv.Value.id, out object v))
-                {
-                  r[kv.Key] = v;
-                }
-              }
-            }
-
-            foreach (KeyValuePair<string, object> kv in r)
-            {
-              if (!result.ContainsKey(n.id))
-                result[n.id] = new Dictionary<string, object>();
-              result[n.id][kv.Key] = kv.Value;
-            }
-
-            foreach (KeyValuePair<string, NodeInterfaceState> kv in n.outputs)
-            {
-              foreach (ConnectionState c in graph.connections)
-              {
-                if (c.from == kv.Value.id)
-                {
-                  inputs[c.to] = r[kv.Key];
-                }
-              }
-            }
-
-            nodesToCalculate[n.id] = NodeRuntimeStatus.stoped;
-            List<NodeState> forwardNodes = GetForwardNodes(n);
-            foreach (NodeState _n in forwardNodes)
-            {
-              RunDeepLeaf(_n);
+              inputs[c.to] = new List<object> { v };
             }
           }
-          catch (Exception ex)
+          else
           {
-            tcs.SetException(ex);
-          }
-          finally
-          {
-            nodesToCalculate[n.id] = NodeRuntimeStatus.stoped;
-            if (nodesToCalculate.Values.All(x => x == NodeRuntimeStatus.stoped))
-            {
-              tcs.SetResult(result);
-            }
+            inputs[c.to] = v;
           }
         }
       }
     }
-
-    GetLeafNodes(startingNode);
-    RunDeepLeaf(startingNode);
-    return tcs.Task;
+    List<NodeState> forwardNodes = new List<NodeState>();
+    foreach (var o in n.outputs.Values)
+    {
+      if (forwardMap.ContainsKey(o.id))
+      {
+        forwardNodes.AddRange(forwardMap[o.id]);
+      }
+    }
+    IEnumerable<Task<CalculationResult>> tasks = forwardNodes.Select(n => CalculateNode(n, graph, inputs, calculationData, forwardMap, result));
+    await Task.WhenAll(tasks);
+    return result;
+  }
+  public override Task<CalculationResult> Execute(CalculationData calculationData)
+  {
+    var inputValues = GetInputValues(editor.graph);
+    return RunGraph(editor.graph, inputValues, calculationData);
   }
   public Dictionary<string, object> GetInputValues(GraphState graph)
   {
@@ -205,10 +119,62 @@ public class AsyncForwardEngine<T> : BaseEngine<T>
     }
     return inputValues;
   }
-}
-public enum NodeRuntimeStatus
-{
-  none,
-  started,
-  stoped,
+  bool AllowMultipleConnections(string to, ConnectionState[] connections)
+  {
+    return connections.Where(x => x.to == to).Count() > 1;
+  }
+  List<NodeState> GetStartNodes(GraphState graph)
+  {
+    List<NodeState> nodes = new List<NodeState>();
+    foreach (var node in graph.nodes)
+    {
+      if (IsStartNode(node, graph))
+      {
+        nodes.Add(node);
+      }
+    }
+    return nodes;
+  }
+  bool IsStartNode(NodeState node, GraphState graph)
+  {
+    foreach (var i in node.inputs.Values)
+    {
+      foreach (var c in graph.connections)
+      {
+        if (c.to == i.id)
+          return false;
+      }
+    }
+    return true;
+  }
+  Dictionary<string, List<NodeState>> MapForwardNode(GraphState graph)
+  {
+    Dictionary<string, List<NodeState>> map = new Dictionary<string, List<NodeState>>();
+    foreach (var n in graph.nodes)
+    {
+      foreach (var i in n.inputs.Values)
+      {
+        foreach (var c in graph.connections)
+        {
+          if (c.to == i.id)
+          {
+            if (!map.ContainsKey(c.from))
+            {
+              map[c.from] = new List<NodeState>();
+            }
+            map[c.from].Add(n);
+          }
+        }
+      }
+    }
+    return map;
+  }
+  private object getInterfaceValue(Dictionary<string, object> values, string id)
+  {
+    if (!values.ContainsKey(id))
+    {
+      throw new Exception($"Could not find value for interface {id}\nThis is likely a Baklava internal issue. Please report it on GitHub.");
+    }
+    return values[id];
+  }
 }

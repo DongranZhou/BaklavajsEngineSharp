@@ -51,6 +51,6 @@ namespace Baklavajs
       }
     }
     public virtual Task<CalculationResult> Execute(CalculationData calculationData) => Task.FromResult(new CalculationResult());
-    public virtual Task RunGraph(GraphState graph, Dictionary<string, object> inputs, CalculationData calculationData) => Task.CompletedTask;
+    public virtual Task<CalculationResult> RunGraph(GraphState graph, Dictionary<string, object> inputs, CalculationData calculationData) => Task.FromResult(new CalculationResult());
   }
 }
